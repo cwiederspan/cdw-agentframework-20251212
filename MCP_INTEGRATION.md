@@ -1,175 +1,137 @@
-# MCP Server Integration Guide
+# MCP Server Integration Example
 
-This document explains how to integrate Model Context Protocol (MCP) Servers with your AI agents using Microsoft.Extensions.AI.
+This example demonstrates how to use the Microsoft Agent Framework with MCP (Model Context Protocol) Servers.
 
-## What is MCP?
+## About MCP
 
-Model Context Protocol (MCP) is an open protocol that enables AI applications to securely connect to external data sources and tools. It provides a standardized way to expose:
+Model Context Protocol (MCP) is an open protocol that standardizes how AI applications connect to external data sources and tools. It enables agents to access:
 
-- **Resources**: Data and content that the AI can access (files, databases, APIs)
-- **Tools**: Functions the AI can call to perform actions
-- **Prompts**: Pre-defined prompt templates for common tasks
+- **Tools**: Functions the agent can call
+- **Resources**: Data and content the agent can read
+- **Prompts**: Pre-defined prompt templates
 
-## Architecture Overview
+## Prerequisites
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                   AI Application                        │
-│              (Microsoft.Extensions.AI)                  │
-└───────────────────────┬─────────────────────────────────┘
-                        │
-        ┌───────────────┴───────────────┐
-        │                               │
-        ▼                               ▼
-┌──────────────┐              ┌──────────────────┐
-│ LLM Provider │              │   MCP Server(s)  │
-│ (OpenAI,     │              │                  │
-│  Azure, etc.)│              │  ┌─────────────┐ │
-└──────────────┘              │  │ Tools       │ │
-                              │  ├─────────────┤ │
-                              │  │ Resources   │ │
-                              │  ├─────────────┤ │
-                              │  │ Prompts     │ │
-                              │  └─────────────┘ │
-                              └──────────────────┘
-```
+To run the MCP Server example, you'll need:
 
-## How It Works
+1. **Node.js**: For running the MCP server (npx command)
+2. **OpenAI API Key**: Set as environment variable
+3. **Azure OpenAI** (optional): Can use Azure instead of OpenAI
 
-### 1. Tool Registration
+## Example Code
 
-Tools are registered with the AI client and exposed via the MCP protocol:
+Here's how to create an agent that uses an MCP Server (based on the official sample):
 
 ```csharp
+using Azure.AI.OpenAI;
+using Azure.Identity;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using ModelContextProtocol.Client;
+using OpenAI.Chat;
+
+var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT") 
+    ?? throw new InvalidOperationException("AZURE_OPENAI_ENDPOINT is not set.");
+var deploymentName = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT_NAME") 
+    ?? "gpt-4o-mini";
+
+// Create an MCP Client for the GitHub server
+await using var mcpClient = await McpClient.CreateAsync(
+    new StdioClientTransport(new()
+    {
+        Name = "MCPServer",
+        Command = "npx",
+        Arguments = ["-y", "--verbose", "@modelcontextprotocol/server-github"],
+    }));
+
+// Retrieve the list of tools available on the GitHub server
+var mcpTools = await mcpClient.ListToolsAsync().ConfigureAwait(false);
+
+// Create an AI agent with the MCP tools
+AIAgent agent = new AzureOpenAIClient(
+    new Uri(endpoint),
+    new AzureCliCredential())
+     .GetChatClient(deploymentName)
+     .CreateAIAgent(
+         instructions: "You answer questions related to GitHub repositories only.", 
+         tools: [.. mcpTools.Cast<AITool>()]);
+
+// Invoke the agent with a GitHub-related query
+Console.WriteLine(await agent.RunAsync(
+    "Summarize the last four commits to the microsoft/agent-framework repository?"));
+```
+
+## Running the Example
+
+### Option 1: Using Azure OpenAI
+
+```bash
+# Set environment variables
+export AZURE_OPENAI_ENDPOINT="https://your-resource.openai.azure.com/"
+export AZURE_OPENAI_DEPLOYMENT_NAME="gpt-4o-mini"
+
+# Authenticate with Azure CLI
+az login
+
+# Run the example
+dotnet run
+```
+
+### Option 2: Using OpenAI
+
+To adapt the example for OpenAI instead of Azure:
+
+```csharp
+using System.ClientModel;
+using Microsoft.Agents.AI;
+using OpenAI;
+using OpenAI.Chat;
+using ModelContextProtocol.Client;
 using Microsoft.Extensions.AI;
 
-// Define a tool using AIFunctionFactory
-var weatherTool = AIFunctionFactory.Create(
-    (string location) => {
-        // Call weather API
-        return GetWeatherData(location);
-    },
-    name: "get_weather",
-    description: "Gets current weather for a location"
-);
+var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") 
+    ?? throw new InvalidOperationException("OPENAI_API_KEY is not set.");
+var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-4o-mini";
 
-// Add tool to chat client
-var chatClient = CreateChatClient();
-var chatClientWithTools = new ChatClientBuilder(chatClient)
-    .UseFunctionInvocation()
-    .Build();
+// Create an MCP Client for the GitHub server
+await using var mcpClient = await McpClient.CreateAsync(
+    new StdioClientTransport(new()
+    {
+        Name = "GitHubMCP",
+        Command = "npx",
+        Arguments = ["-y", "@modelcontextprotocol/server-github"],
+    }));
+
+// Get tools from the MCP server
+var mcpTools = await mcpClient.ListToolsAsync().ConfigureAwait(false);
+
+// Create agent with MCP tools
+AIAgent agent = new OpenAIClient(apiKey)
+    .GetChatClient(model)
+    .CreateAIAgent(
+        instructions: "You help users work with GitHub repositories.",
+        tools: [.. mcpTools.Cast<AITool>()]);
+
+// Use the agent
+var response = await agent.RunAsync(
+    "What are the recent commits in microsoft/agent-framework?");
+Console.WriteLine(response.Content.Last().Text);
 ```
 
-### 2. AI-Driven Tool Calling
+## Available MCP Servers
 
-When a user asks a question that requires external data, the AI:
+Microsoft provides several MCP servers you can use:
 
-1. Recognizes the need for a tool
-2. Generates parameters for the tool call
-3. Invokes the tool through MCP
-4. Receives the result
-5. Incorporates the result into its response
+- **GitHub**: `@modelcontextprotocol/server-github`
+- **Filesystem**: `@modelcontextprotocol/server-filesystem`
+- **Memory**: `@modelcontextprotocol/server-memory`
+- **And more...**
 
-```csharp
-var messages = new List<ChatMessage>
-{
-    new(ChatRole.User, "What's the weather like in Seattle?")
-};
+See the [Model Context Protocol documentation](https://modelcontextprotocol.io/) for the full list.
 
-// AI automatically decides to call get_weather("Seattle")
-var response = await chatClient.CompleteAsync(messages, new ChatOptions
-{
-    Tools = [weatherTool]
-});
-```
+## Learn More
 
-### 3. MCP Server Benefits
-
-**For Developers:**
-- Standard protocol for tool integration
-- Reusable server implementations
-- Security and access control built-in
-
-**For AI Applications:**
-- Access to external data and services
-- Consistent interface across different tools
-- Better context and more accurate responses
-
-## Example MCP Server Tools
-
-### Weather Service
-```csharp
-public static AIFunction CreateWeatherTool()
-{
-    return AIFunctionFactory.Create(
-        (string location) => {
-            // In production, call actual weather API
-            var weather = WeatherService.GetCurrent(location);
-            return $"Temperature: {weather.Temp}°F, Conditions: {weather.Conditions}";
-        },
-        name: "get_weather",
-        description: "Gets current weather for a specified location"
-    );
-}
-```
-
-### Database Query
-```csharp
-public static AIFunction CreateDatabaseQueryTool()
-{
-    return AIFunctionFactory.Create(
-        (string query) => {
-            // Execute safe, parameterized query
-            using var connection = new SqlConnection(connectionString);
-            var results = connection.Query(query);
-            return JsonSerializer.Serialize(results);
-        },
-        name: "query_database",
-        description: "Executes a read-only database query"
-    );
-}
-```
-
-### File System Access
-```csharp
-public static AIFunction CreateFileReadTool()
-{
-    return AIFunctionFactory.Create(
-        (string path) => {
-            // Validate and read file with security checks
-            if (!IsPathAllowed(path))
-                throw new UnauthorizedAccessException();
-            
-            return File.ReadAllText(path);
-        },
-        name: "read_file",
-        description: "Reads the contents of a file"
-    );
-}
-```
-
-## Security Considerations
-
-1. **Authentication**: Verify the identity of clients connecting to your MCP server
-2. **Authorization**: Implement proper access controls for tools and resources
-3. **Input Validation**: Validate all parameters before executing tool functions
-4. **Rate Limiting**: Prevent abuse by limiting request frequency
-5. **Audit Logging**: Log all tool invocations for security monitoring
-
-## Next Steps
-
-To build a production-ready MCP Server integration:
-
-1. Review the [MCP Specification](https://modelcontextprotocol.io/)
-2. Implement proper authentication and authorization
-3. Add comprehensive error handling
-4. Set up monitoring and logging
-5. Write tests for your tools
-6. Document your tools for users
-
-## Resources
-
-- [Microsoft.Extensions.AI Documentation](https://learn.microsoft.com/en-us/dotnet/ai/)
+- [Microsoft Agent Framework Documentation](https://learn.microsoft.com/agent-framework/)
+- [Agent Framework GitHub Repository](https://github.com/microsoft/agent-framework)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
-- [OpenAI Function Calling](https://platform.openai.com/docs/guides/function-calling)
-- [.NET AI Samples](https://github.com/dotnet/ai-samples)
+- [MCP Samples](https://github.com/microsoft/agent-framework/tree/main/dotnet/samples/GettingStarted/ModelContextProtocol)
