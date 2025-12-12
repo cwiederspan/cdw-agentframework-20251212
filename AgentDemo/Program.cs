@@ -2,7 +2,6 @@
 // This sample demonstrates using Microsoft Agent Framework with MCP Server support.
 // Based on samples from: https://github.com/microsoft/agent-framework
 
-using System.ClientModel;
 using Microsoft.Agents.AI;
 using OpenAI;
 using OpenAI.Chat;

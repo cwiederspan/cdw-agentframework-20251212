@@ -20,7 +20,9 @@ To run the MCP Server example, you'll need:
 
 ## Example Code
 
-Here's how to create an agent that uses an MCP Server (based on the official sample):
+### Using Azure OpenAI with MCP Server
+
+This example shows how to create an agent using Azure OpenAI with an MCP Server (based on the official sample):
 
 ```csharp
 using Azure.AI.OpenAI;
@@ -39,9 +41,9 @@ var deploymentName = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT
 await using var mcpClient = await McpClient.CreateAsync(
     new StdioClientTransport(new()
     {
-        Name = "MCPServer",
+        Name = "GitHubMCPServer",
         Command = "npx",
-        Arguments = ["-y", "--verbose", "@modelcontextprotocol/server-github"],
+        Arguments = ["-y", "@modelcontextprotocol/server-github"],
     }));
 
 // Retrieve the list of tools available on the GitHub server
@@ -61,9 +63,9 @@ Console.WriteLine(await agent.RunAsync(
     "Summarize the last four commits to the microsoft/agent-framework repository?"));
 ```
 
-## Running the Example
+## Running the Examples
 
-### Option 1: Using Azure OpenAI
+### Using Azure OpenAI
 
 ```bash
 # Set environment variables
@@ -77,17 +79,27 @@ az login
 dotnet run
 ```
 
-### Option 2: Using OpenAI
+### Using OpenAI
 
-To adapt the example for OpenAI instead of Azure:
+```bash
+# Set environment variable
+export OPENAI_API_KEY="sk-your-api-key-here"
+export OPENAI_MODEL="gpt-4o-mini"  # optional
+
+# Run the example
+dotnet run
+```
+
+### Using OpenAI with MCP Server
+
+This example shows how to use OpenAI (instead of Azure OpenAI) with an MCP Server:
 
 ```csharp
-using System.ClientModel;
 using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using ModelContextProtocol.Client;
 using OpenAI;
 using OpenAI.Chat;
-using ModelContextProtocol.Client;
-using Microsoft.Extensions.AI;
 
 var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") 
     ?? throw new InvalidOperationException("OPENAI_API_KEY is not set.");
@@ -97,7 +109,7 @@ var model = Environment.GetEnvironmentVariable("OPENAI_MODEL") ?? "gpt-4o-mini";
 await using var mcpClient = await McpClient.CreateAsync(
     new StdioClientTransport(new()
     {
-        Name = "GitHubMCP",
+        Name = "GitHubMCPServer",
         Command = "npx",
         Arguments = ["-y", "@modelcontextprotocol/server-github"],
     }));
