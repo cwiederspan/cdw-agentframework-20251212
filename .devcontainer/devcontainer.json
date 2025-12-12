@@ -1,0 +1,42 @@
+{
+  "name": "Agent Framework Demo",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "installOhMyZsh": true,
+      "upgradePackages": true,
+      "username": "codespace",
+      "userUid": "automatic",
+      "userGid": "automatic"
+    },
+    "ghcr.io/devcontainers/features/azure-cli:1": {
+      "version": "latest",
+      "extensions": ""
+    },
+    "ghcr.io/devcontainers/features/dotnet:2": {
+      "version": "9.0",
+      "installUsingApt": true
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csharp",
+        "ms-dotnettools.csdevkit",
+        "ms-dotnettools.vscode-dotnet-runtime",
+        "github.copilot",
+        "github.copilot-chat"
+      ],
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh"
+      }
+    }
+  },
+
+  "postCreateCommand": "dotnet restore AgentDemo/AgentDemo.csproj",
+
+  "remoteUser": "codespace"
+}
